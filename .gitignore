@@ -1,0 +1,6 @@
+src/test/CheckerSuite*.py
+
+src/test/solutions/
+src/test/testcases/
+
+!src/test/CheckerSuite.py
