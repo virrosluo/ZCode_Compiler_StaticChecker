@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod, ABCMeta
 from dataclasses import dataclass
 from typing import List, Tuple
 
+
 class AST(ABC):
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
@@ -59,7 +60,7 @@ class BinaryOp(Expr):
         self.right = right
 
     def __str__(self):
-        return f"BinaryOp({self.op}, {str(self.left)}, {str(self.right)}))"
+        return f"BinaryOp({self.op}, {str(self.left)}, {str(self.right)})"
 
 
 # used for unary expression with orerand like !,+,-
@@ -175,7 +176,7 @@ class If(Stmt):
         self.elseStmt = elseStmt
 
     def __str__(self):
-        return f"If({str(self.expr)}, {str(self.thenStmt)}), [{', '.join(f'({str(x[0])}, {str(x[1])})' for x in self.elifStmt)}], {str(self.elseStmt) if self.elseStmt else 'None'}"
+        return f"If(({str(self.expr)}, {str(self.thenStmt)}), [{', '.join(f'({str(x[0])}, {str(x[1])})' for x in self.elifStmt)}], {str(self.elseStmt) if self.elseStmt else 'None'})"
 
 
 class For(Stmt):
@@ -282,10 +283,10 @@ class StringType(Type):
     def __str__(self):
         return "StringType"
     
+    
 class VoidType(Type):
     def __str__(self):
         return "VoidType"
-
 
 class ArrayType(Type):
     # size: List[float]

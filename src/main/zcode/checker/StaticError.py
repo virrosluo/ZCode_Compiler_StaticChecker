@@ -29,8 +29,7 @@ class Parameter(Kind):
 
 
 class StaticError(Exception):
-    def __init__(self):
-        pass
+    pass
 
 
 class Redeclared(StaticError):
@@ -42,18 +41,19 @@ class Redeclared(StaticError):
         self.name = name
 
     def __str__(self):
-        return f"Redeclared {str(self.kind)}: {self.name})"
+        return f"Redeclared {str(self.kind)}: {self.name}"
 
 
 class Undeclared(StaticError):
     # kind: Kind
     # name: str
+    # them moi
     def __init__(self, kind, name):
         self.kind = kind
         self.name = name
-
+    
     def __str__(self):
-        return f"Undeclared {str(self.kind)}: {self.name})"
+        return f"Undeclared {str(self.kind)}: {self.name}"
 
 
 class TypeMismatchInExpression(StaticError):
@@ -110,9 +110,4 @@ class NoEntryPoint(StaticError):
     def __str__(self):
         return "No Entry Point"
 
-class Unname(StaticError):
-    def __init__(self, msg:str):
-        self.msg = msg
-
-    def __str__(self):
-        return self.msg
+class Unname(StaticError): pass
