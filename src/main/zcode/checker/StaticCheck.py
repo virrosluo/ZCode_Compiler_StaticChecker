@@ -54,7 +54,8 @@ class ArrayType(Type):
 
     def __eq__(self, other):
         if super(ArrayType, self).__eq__(other):
-            return self.eleType == other.eleType and self.eleLength == other.eleLength
+            return self.eleType == other.eleType and \
+                (self.eleLength == other.eleLength if self.eleLength is not None and other.eleLength is not None else True)
         else:
             return False
     
@@ -85,10 +86,17 @@ class StaticChecker(BaseVisitor, Utils):
             self.visit(i, param)
 
         _, var_dict = param[0]
-        if not ('main' in var_dict): raise NoEntryPoint()
-
+        
+        # Ưu tiên No Definition for a Function. PROVE
         fnDeclaration = list(filter(lambda x: type(x) is FunctionType and x.declare_type == FunctionType.FUNC_DECLR, var_dict.values()))
         if len(fnDeclaration) > 0: raise NoDefinition(fnDeclaration[0].name)
+
+        if not ('main' in var_dict): 
+            raise NoEntryPoint()
+        else:
+            mainInfo = var_dict['main'] 
+            if not(mainInfo == FunctionType("main", [], VoidType(), FunctionType.FUNC_DEFIN)):
+                raise NoEntryPoint()
 
     def visitVarDecl(self, ast, param):
         _, cur_env = param[0]
@@ -99,10 +107,11 @@ class StaticChecker(BaseVisitor, Utils):
         
         id_name = ast.name.name
         if id_instance is not None:
-            raise Redeclared(Variable(), id_name)
+            raise Redeclared(Variable(), ast.name)
         else:
             cur_env[id_name] = NoneType()
             valueType = self.visit(ast.varInit, param) if ast.varInit else NoneType()
+            
             if ast.varType:
                 varType = self.visit(ast.varType, param)
                 
@@ -115,10 +124,8 @@ class StaticChecker(BaseVisitor, Utils):
                     raise TypeMismatchInStatement(ast)
                 else:
                     cur_env[id_name] = varType
-            else: 
-                if type(valueType) is ArrayType:
-                    raise TypeMismatchInStatement(ast)
-                
+            else:
+                # Do not need to check the valueType is not Array because we permit in this. PROVE
                 # Incase 'var' type này thì assignment trước đã luôn đảm bảo là var sẽ có expression => valueType != NONETYPE
                 cur_env[id_name] = valueType
 
@@ -132,13 +139,13 @@ class StaticChecker(BaseVisitor, Utils):
             fn_instance = None
             
         new_env = (FUNC_ENV, {})
+        try:
+            for i in ast.param: self.visit(i, [new_env])
+        except Redeclared as e:
+            raise Redeclared(kind=Parameter(), name=ast.name)
+        
         if fn_instance is None:
-            # Because we haven't declare this function name => Create it and append into cur_env
-            try:
-                for i in ast.param: self.visit(i, [new_env])
-            except Redeclared as e:
-                raise Redeclared(kind=Parameter(), name=e.name)
-            
+            # Because we haven't declare this function name => Create it and append into cur_env            
             fn_instance = FunctionType(id=ast.name.name, 
                                        params=[new_env[1][p.name.name] for p in ast.param], 
                                        return_type=NoneType(), 
@@ -146,13 +153,13 @@ class StaticChecker(BaseVisitor, Utils):
             cur_env[ast.name.name] = fn_instance
         else:
             if type(fn_instance) is not FunctionType:
-                raise Redeclared(kind=Function(), name=ast.name.name)
+                raise Redeclared(kind=Function(), name=ast.name)
             else:
                 if fn_instance.declare_type == FunctionType.FUNC_DEFIN or ast.body is None:
                     # Incase the function had body but now define again
                     # Or case: the function declared twices
-                    raise Redeclared(kind=Function(), name=fn_instance.name)
-            
+                    raise Redeclared(kind=Function(), name=ast.name)
+
         # fn_instance.declare_type == FUNC_DECLR and ast.body != None
         if ast.body is not None:
             body_type = self.visit(ast.body, [new_env] + param)
@@ -171,21 +178,19 @@ class StaticChecker(BaseVisitor, Utils):
     def visitBinaryOp(self, ast, param):
         def on_check(inferType:Type):
             typeOperand_1 = self.visit(ast.left, param)
+            if type(typeOperand_1) is NoneType:
+                typeOperand_1 = Utils.InferType(ast.left.name if type(ast.left) is Id else ast.left.name.name,
+                                                inferType(), param)
+                
             typeOperand_2 = self.visit(ast.right, param)
+            if type(typeOperand_2) is NoneType:
+                typeOperand_2 = Utils.InferType(ast.right.name if type(ast.right) is Id else ast.right.name.name,
+                                                inferType(), param)
             
             if (type(typeOperand_1) is inferType) and (type(typeOperand_2) is inferType):
                 return typeOperand_1
             else:
-                if type(typeOperand_1) is NoneType:
-                    typeOperand_1 = Utils.InferType(ast.left.name if type(ast.left) is Id else ast.left.name.name,
-                                                    inferType(), param)
-                if type(typeOperand_2) is NoneType:
-                    typeOperand_2 = Utils.InferType(ast.right.name if type(ast.right) is Id else ast.right.name.name,
-                                                    inferType(), param)
-                if not ((type(typeOperand_1) is inferType) and (type(typeOperand_2) is inferType)):
-                    raise TypeMismatchInExpression(ast)
-                else:
-                    return typeOperand_1
+                raise TypeMismatchInExpression(ast)
 
         if ast.op in ['+', '-', '*', '/', '%']:
             return on_check(NumType)
@@ -239,34 +244,25 @@ class StaticChecker(BaseVisitor, Utils):
                 return i
         return VoidType()
 
-
     def visitIf(self, ast, param):
         cur_env_name, _ = param[0]
 
         ifExprType = type(self.visit(ast.expr, param)) is BoolType
         stmt_type = [self.visit(ast.thenStmt, [(cur_env_name, {})] + param)]
-
+        
         elif_stmt_type, elifExprType = [], []
         for expr, stmt in ast.elifStmt:
             elifExprType.append(type(self.visit(expr, param)) is BoolType)
             elif_stmt_type.append(self.visit(stmt, [(cur_env_name, {})] + param))
 
-        if ifExprType and all(elifExprType): 
+        if not (ifExprType and all(elifExprType)):
             raise TypeMismatchInStatement(ast)
 
         else_stmt_type = [self.visit(ast.elseStmt, [(cur_env_name, {})] + param)] if ast.elseStmt else []
-
-        # In this set, all element must be the same type (VoidType or other Type) -> Cannot have multiple return type
-        return_type_list = [i 
-                            for i in stmt_type + elif_stmt_type + else_stmt_type 
-                            if type(i) is not VoidType and type(i) is not NoneType]
         
-        if len(return_type_list) == 0:
-            return VoidType()
-        elif len(return_type_list) == 1: 
-            return return_type_list[0]
-        else:
-            raise TypeCannotBeInferred(ast)
+        # Incase of all ifelse also have return => Get the first return type 
+        return_type_list = stmt_type + elif_stmt_type + else_stmt_type
+        return return_type_list[0]
 
     def visitFor(self, ast, param):
         new_env = (FOR_ENV, {})
@@ -307,7 +303,11 @@ class StaticChecker(BaseVisitor, Utils):
 
     def visitReturn(self, ast, param):
         if ast.expr: 
-            return self.visit(ast.expr, param)
+            exprType = self.visit(ast.expr, param)
+            if type(exprType) is NoneType: 
+                raise TypeCannotBeInferred(ast)
+            else:
+                return exprType
         else: 
             return VoidType()
 
@@ -328,7 +328,7 @@ class StaticChecker(BaseVisitor, Utils):
         
         return VoidType()
 
-    # Check the input param type ?
+
     def visitCallStmt(self, ast, param):
         try: 
             fn_instance = self.visit(ast.name, param)
@@ -354,7 +354,7 @@ class StaticChecker(BaseVisitor, Utils):
         else: 
             raise Undeclared(kind=Function(), name=ast.name)
         
-    # Incase use a variable as a callee (number a; a()) ???
+        
     def visitCallExpr(self, ast, param):
         try:
             fn_instance = self.visit(ast.name, param)
@@ -382,12 +382,10 @@ class StaticChecker(BaseVisitor, Utils):
     def visitId(self, ast, param):
         instance = [env[ast.name] for _, env in param if ast.name in env]
         if len(instance) == 0: 
-            raise Undeclared(kind=Variable(), name=ast.name)
+            raise Undeclared(kind=Identifier(), name=ast.name)
         else: 
             return instance[0]
 
-    # If no error occurs, return NumType, BoolType, StringType, or ArrayType (in case [[1,2,3], [4,5,6]])
-    # Incase a[1,2,3] if a is 3D array -> it will not out of boundary. Otherwise, what error will we raise ?
     def visitArrayCell(self, ast, param):                   
         numTypeIdx = True
         for index in ast.idx:
@@ -398,13 +396,18 @@ class StaticChecker(BaseVisitor, Utils):
             numTypeIdx = (type(idxType) is NumType) and numTypeIdx 
             
         arrType = self.visit(ast.arr, param)
+        if type(arrType) is NoneType:
+            raise TypeCannotBeInferred(ast)
 
         if (numTypeIdx == True) and (type(arrType) is ArrayType):
             try: 
                 eleType = reduce(lambda acc, _: acc.eleType, range(len(ast.idx)), arrType)
-                return eleType
+                if type(eleType) is ArrayType: 
+                    raise Exception()
+                else:
+                    return eleType
             except: 
-                raise Unname("Indexing out of boundary")
+                raise TypeMismatchInExpression(ast)
         else: 
             raise TypeMismatchInExpression(ast)
 
@@ -417,15 +420,20 @@ class StaticChecker(BaseVisitor, Utils):
     def visitStringLiteral(self, ast, param):
         return StringType()
 
-    # What will we return if Element in array is not same type ?
     def visitArrayLiteral(self, ast, param):
-        elementsType = list(map(lambda x: self.visit(x, param), ast.value))
-        isIdenticalType = all([type(x) == type(elementsType[0]) for x in elementsType[1:]])
+        
+        elementsType = []
+        for x in ast.value:
+            eleType = self.visit(x, param)
+            if type(eleType) is NoneType: raise TypeCannotBeInferred(ast)
+            else: elementsType.append(eleType)
+            
+        isIdenticalType = all([x == elementsType[0] for x in elementsType[1:]])
 
         if isIdenticalType: 
             return ArrayType(elementsType[0], float(len(elementsType)))
         else:
-            raise Unname("Element in array is not same type")
+            raise TypeMismatchInExpression(ast)
     
 # ---------------------------------------------------------------- Type Identification
 
