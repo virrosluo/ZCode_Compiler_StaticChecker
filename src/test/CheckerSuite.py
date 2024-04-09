@@ -1150,7 +1150,7 @@ class CheckerSuite(unittest.TestCase):
                 var b <- a
             end
             """
-            expect = "Type Mismatch In Expression: ArrayCell(CallExpr(Id(test), []), [NumLit(1.0)])"
+            expect = "Type Cannot Be Inferred: VarDecl(Id(b), None, var, Id(a))"
             self.assertTrue(TestChecker.test(input, expect, 468))
             
     def test69(self):
@@ -1211,3 +1211,122 @@ class CheckerSuite(unittest.TestCase):
         """
         expect = "Redeclared Function: Id(a)"
         self.assertTrue(TestChecker.test(input, expect, 472))
+        
+    def test73(self):
+        input = """
+        func foo()
+        begin
+            number a <- 10
+            for a until a > 10 by 1
+            begin
+                number b <- 20
+            end
+            
+            if (a = 1)
+            begin
+                number c <- 30
+                return true
+            end
+            elif (a > 1)
+                number e <- 20
+            else
+            begin
+                number d <- 40
+                return 1
+            end
+        end
+        
+        func main()
+        begin
+            bool a <- foo()
+        end
+        """
+        expect = "successful"
+        self.assertTrue(TestChecker.test(input, expect, 473))
+        
+    def test74(self):
+        input = """
+        func foo()
+        begin
+            number a <- 10
+            for a until a > 10 by 1
+            begin
+                number b <- 20
+            end
+            
+            if (a = 1)
+            begin
+                number c <- 30
+            end
+            elif (a > 1)
+                number e <- 20
+            else
+            begin
+                number d <- 40
+            end
+        end
+        
+        func main()
+        begin
+            bool a <- foo()
+        end
+        """
+        expect = "Type Mismatch In Expression: CallExpr(Id(foo), [])"
+        self.assertTrue(TestChecker.test(input, expect, 474))
+        
+    def test75(self):
+        input = """
+        func foo()
+        begin
+            number a <- 10
+            for a until a > 10 by 1
+            begin
+                number b <- 20
+            end
+            
+            if (a = 1)
+            begin
+                number c <- 30
+            end
+            elif (a > 1)
+                number e <- 20
+            else
+            begin
+                number d <- 40
+            end
+        end
+        
+        func main()
+        begin
+            foo()
+        end
+        """
+        expect = "successful"
+        self.assertTrue(TestChecker.test(input, expect, 475))
+        
+    def test76(self):
+        input = """
+        number a
+        
+        func main()
+        begin
+            return 2
+        end
+        """
+        expect = "No Entry Point"
+        self.assertTrue(TestChecker.test(input, expect, 476))
+        
+    def test77(self):
+        input = """
+        func a()
+        begin
+            return 1
+        end
+        
+        func main()
+        begin
+            number b <- a
+        end
+        """
+        expect = ""
+        self.assertTrue(TestChecker.test(input, expect, 477))

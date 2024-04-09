@@ -41,7 +41,11 @@ class FunctionType(Type):
         
     def __eq__(self, other):
         if super(FunctionType, self).__eq__(other):
-            return self.return_type == other.return_type
+            return all([
+                self.return_type == other.return_type,
+                len(self.params) == len(other.params),
+                all([i == j for i,j in zip(self.params, other.params)])
+            ])
         
     def __str__(self):
         return f"FunctionType: {self.name} - {self.params} - {self.return_type} - {self.declare_type}"
@@ -110,9 +114,9 @@ class StaticChecker(BaseVisitor, Utils):
             raise Redeclared(Variable(), ast.name)
         else:
             cur_env[id_name] = NoneType()
-            valueType = self.visit(ast.varInit, param) if ast.varInit else NoneType()
             
             if ast.varType:
+                valueType = self.visit(ast.varInit, param) if ast.varInit else NoneType()
                 varType = self.visit(ast.varType, param)
                 
                 if type(valueType) is NoneType and ast.varInit: # Infer type for NoneType of right hand side variable of the declaration 
@@ -126,10 +130,17 @@ class StaticChecker(BaseVisitor, Utils):
                     cur_env[id_name] = varType
             else:
                 # Do not need to check the valueType is not Array because we permit in this. PROVE
-                # Incase 'var' type này thì assignment trước đã luôn đảm bảo là var sẽ có expression => valueType != NONETYPE
+                if ast.varInit:
+                    # Incase we have variableInit. If the RHS is NoneType but LHS also NoneType => Raise TypeCannotBeInferred
+                    valueType = self.visit(ast.varInit, param)
+                    if type(valueType) is NoneType: raise TypeCannotBeInferred(ast)
+                else:
+                    # Incase we dont have variableInit. The LHS Type can assign to NoneType
+                    valueType = NoneType()
+                
                 cur_env[id_name] = valueType
 
-        return VoidType()
+        return None
 
     def visitFuncDecl(self, ast, param):
         _, cur_env = param[0]       
@@ -163,6 +174,7 @@ class StaticChecker(BaseVisitor, Utils):
         # fn_instance.declare_type == FUNC_DECLR and ast.body != None
         if ast.body is not None:
             body_type = self.visit(ast.body, [new_env] + param)
+            if body_type is None: body_type = VoidType()
             fn_type = fn_instance.return_type
             
             if type(fn_type) is NoneType:
@@ -171,7 +183,7 @@ class StaticChecker(BaseVisitor, Utils):
                 raise TypeMismatchInStatement(ast)
             fn_instance.declare_type = FunctionType.FUNC_DEFIN
                         
-        return VoidType()
+        return None
 
 # ---------------------------------------------------------------- BIN / UNI OPERATION
 
@@ -237,12 +249,10 @@ class StaticChecker(BaseVisitor, Utils):
         return_type = list(map(
             lambda stmt: self.visit(stmt, [new_env] + param), 
             ast.stmt))
+        return_type = list(filter(lambda x: x is not None, return_type))
         
         # Getting the return type for the block statement (Incase block statement have multiple return statements) => Get the first return statement
-        for i in return_type:
-            if type(i) is not VoidType:
-                return i
-        return VoidType()
+        return return_type[0] if len(return_type) > 0 else None
 
     def visitIf(self, ast, param):
         cur_env_name, _ = param[0]
@@ -261,8 +271,8 @@ class StaticChecker(BaseVisitor, Utils):
         else_stmt_type = [self.visit(ast.elseStmt, [(cur_env_name, {})] + param)] if ast.elseStmt else []
         
         # Incase of all ifelse also have return => Get the first return type 
-        return_type_list = stmt_type + elif_stmt_type + else_stmt_type
-        return return_type_list[0]
+        return_type_list = [i for i in stmt_type + elif_stmt_type + else_stmt_type if i is not None]
+        return return_type_list[0] if len(return_type_list) > 0 else None
 
     def visitFor(self, ast, param):
         new_env = (FOR_ENV, {})
@@ -284,7 +294,7 @@ class StaticChecker(BaseVisitor, Utils):
 
         if (type(condType) is not BoolType) or (type(idType) is not NumType) or (type(updType) is not NumType): 
             raise TypeMismatchInStatement(ast)
-
+        
         return self.visit(ast.body, [new_env] + param)
 
     def visitContinue(self, ast, param):
@@ -292,14 +302,14 @@ class StaticChecker(BaseVisitor, Utils):
         if cur_env_type != FOR_ENV: 
             raise MustInLoop(ast)
         else: 
-            return VoidType()
+            return None
 
     def visitBreak(self, ast, param):
         cur_env_type, _ = param[0]
         if cur_env_type != FOR_ENV: 
             raise MustInLoop(ast)
         else:
-            return VoidType()
+            return None
 
     def visitReturn(self, ast, param):
         if ast.expr: 
@@ -326,7 +336,7 @@ class StaticChecker(BaseVisitor, Utils):
         else:
             if left_type != right_type: raise TypeMismatchInStatement(ast)
         
-        return VoidType()
+        return None
 
 
     def visitCallStmt(self, ast, param):
@@ -350,7 +360,7 @@ class StaticChecker(BaseVisitor, Utils):
                     if in_type != fn_param: 
                         raise TypeCannotBeInferred(ast)
 
-                return fn_instance.return_type
+                return None
         else: 
             raise Undeclared(kind=Function(), name=ast.name)
         
@@ -421,7 +431,6 @@ class StaticChecker(BaseVisitor, Utils):
         return StringType()
 
     def visitArrayLiteral(self, ast, param):
-        
         elementsType = []
         for x in ast.value:
             eleType = self.visit(x, param)
