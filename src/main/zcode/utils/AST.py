@@ -289,8 +289,8 @@ class VoidType(Type):
         return "VoidType"
 
 class ArrayType(Type):
-    # size: List[float]
-    # eleType: Type
+    # size
+    # eleTyp: List[float]e: Type
 
     def __init__(self, size, eleType):
         self.size = size

@@ -151,7 +151,7 @@ class CheckerSuite(unittest.TestCase):
             foo()
         end
         """
-        expect = "Type Mismatch In Expression: CallStmt(Id(foo), [])"
+        expect = "Type Mismatch In Statement: CallStmt(Id(foo), [])"
         self.assertTrue(TestChecker.test(input, expect, 409))
 
     def test10(self):
@@ -179,7 +179,7 @@ class CheckerSuite(unittest.TestCase):
             number b <- a()
         end
         """
-        expect = "Undeclared Function: Id(a)"
+        expect = "Undeclared Function: a"
         self.assertTrue(TestChecker.test(input, expect, 411))
 
     def test12(self):
@@ -270,7 +270,7 @@ class CheckerSuite(unittest.TestCase):
             foo(10)
         end
         """
-        expect = "Type Mismatch In Expression: CallStmt(Id(foo), [NumLit(10.0)])"
+        expect = "Type Mismatch In Statement: CallStmt(Id(foo), [NumLit(10.0)])"
         self.assertTrue(TestChecker.test(input, expect, 418))
         
     def test19(self):
@@ -287,7 +287,7 @@ class CheckerSuite(unittest.TestCase):
             foo()
         end
         """
-        expect = "Type Mismatch In Expression: CallStmt(Id(foo), [])"
+        expect = "Redeclared Function: Id(foo)"
         self.assertTrue(TestChecker.test(input, expect, 419))
         
     def test20(self):
@@ -299,7 +299,7 @@ class CheckerSuite(unittest.TestCase):
             a()
         end
         """
-        expect = "Undeclared Function: Id(a)"
+        expect = "Undeclared Function: a"
         self.assertTrue(TestChecker.test(input, expect, 420))
     
     def test21(self):
@@ -316,7 +316,7 @@ class CheckerSuite(unittest.TestCase):
             return "Hello World"
         end
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(a), [VarDecl(Id(b), NumberType, None, None)], Block([Return(StringLit(Hello World))]))"
+        expect = "Type Mismatch In Statement: Return(StringLit(Hello World))"
         self.assertTrue(TestChecker.test(input, expect, 421))
     
     def test22(self):
@@ -333,7 +333,7 @@ class CheckerSuite(unittest.TestCase):
             return "Hello World"
         end
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(a), [VarDecl(Id(b), NumberType, None, None)], Block([Return(StringLit(Hello World))]))"
+        expect = "Type Mismatch In Statement: Return(StringLit(Hello World))"
         self.assertTrue(TestChecker.test(input, expect, 422))
         
     def test23(self):
@@ -367,10 +367,11 @@ class CheckerSuite(unittest.TestCase):
         func main()
         begin
             number b <- a(10)
+            number c <- a
         end
         
         """
-        expect = "Redeclared Function: Id(a)"
+        expect = "successful"
         self.assertTrue(TestChecker.test(input, expect, 424))
     
     def test25(self):
@@ -510,7 +511,7 @@ class CheckerSuite(unittest.TestCase):
         func t2()
             return "String"
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(t1), [], Return(StringLit(String)))"
+        expect = "Type Mismatch In Statement: Return(StringLit(String))"
         self.assertTrue(TestChecker.test(input, expect, 432))
         
     def test33(self):
@@ -533,7 +534,7 @@ class CheckerSuite(unittest.TestCase):
         func t2()
             return 10
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(t2), [], Return(NumLit(10.0)))"
+        expect = "Type Mismatch In Statement: Return(NumLit(10.0))"
         self.assertTrue(TestChecker.test(input, expect, 433))
         
     def test34(self):
@@ -579,7 +580,7 @@ class CheckerSuite(unittest.TestCase):
         func foo(number a, string b)
             return "String"
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(foo), [VarDecl(Id(a), NumberType, None, None), VarDecl(Id(b), StringType, None, None)], Return(StringLit(String)))"
+        expect = "Type Mismatch In Statement: Return(StringLit(String))"
         self.assertTrue(TestChecker.test(input, expect, 435))
         
     def test36(self):
@@ -633,11 +634,11 @@ class CheckerSuite(unittest.TestCase):
         end
         
         func t1()
-            return "String"
+            return "t1"
         func t2()
-            return "String"
+            return "t2"
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(t1), [], Return(StringLit(String)))"
+        expect = "Type Mismatch In Statement: Return(StringLit(t1))"
         self.assertTrue(TestChecker.test(input, expect, 439))
         
     def test40(self):
@@ -652,11 +653,11 @@ class CheckerSuite(unittest.TestCase):
         end
         
         func t1()
-            return 2
+            return 1
         func t2()
-            return "String"
+            return "t2"
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(t2), [], Return(StringLit(String)))"
+        expect = "Type Mismatch In Statement: Return(StringLit(t2))"
         self.assertTrue(TestChecker.test(input, expect, 440))
         
     def test41(self):
@@ -916,7 +917,7 @@ class CheckerSuite(unittest.TestCase):
         func foo()
             return [1,2,3]
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(foo), [], Return(ArrayLit(NumLit(1.0), NumLit(2.0), NumLit(3.0))))"
+        expect = "Type Mismatch In Statement: Return(ArrayLit(NumLit(1.0), NumLit(2.0), NumLit(3.0)))"
         self.assertTrue(TestChecker.test(input, expect, 451))
         
     def test52(self):
@@ -937,7 +938,7 @@ class CheckerSuite(unittest.TestCase):
         func foo()
             return [["String", "string"]]
         """
-        expect = "Type Mismatch In Statement: FuncDecl(Id(foo), [], Return(ArrayLit(ArrayLit(StringLit(String), StringLit(string)))))"
+        expect = "Type Mismatch In Statement: Return(ArrayLit(ArrayLit(StringLit(String), StringLit(string))))"
         self.assertTrue(TestChecker.test(input, expect, 452))
         
     def test53(self):
@@ -1138,8 +1139,8 @@ class CheckerSuite(unittest.TestCase):
                     dynamic a
                     number b[1] <- [a]
                 end
-            """            
-            expect = "Type Cannot Be Inferred: ArrayLit(Id(a))"
+            """
+            expect = ""
             self.assertTrue(TestChecker.test(input, expect, 467))
             
     def test68(self):
@@ -1207,9 +1208,10 @@ class CheckerSuite(unittest.TestCase):
         func main()
         begin
             a()
+            number c <- a
         end
         """
-        expect = "Redeclared Function: Id(a)"
+        expect = "successful"
         self.assertTrue(TestChecker.test(input, expect, 472))
         
     def test73(self):
@@ -1328,5 +1330,5 @@ class CheckerSuite(unittest.TestCase):
             number b <- a
         end
         """
-        expect = ""
+        expect = "Undeclared Identifier: a"
         self.assertTrue(TestChecker.test(input, expect, 477))
