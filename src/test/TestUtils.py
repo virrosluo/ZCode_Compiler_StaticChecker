@@ -2,6 +2,9 @@ import sys
 import os
 from antlr4 import *
 from antlr4.error.ErrorListener import ConsoleErrorListener, ErrorListener
+
+from StaticCheck import StaticChecker
+from StaticError import StaticError
 if not './main/zcode/parser/' in sys.path:
     sys.path.append('./main/zcode/parser/')
 if os.path.isdir('../target/main/zcode/parser') and not '../target/main/zcode/parser/' in sys.path:
@@ -10,8 +13,8 @@ from ZCodeLexer import ZCodeLexer
 from ZCodeParser import ZCodeParser
 from lexererr import *
 from ASTGeneration import ASTGeneration
-from StaticCheck import StaticChecker
-from StaticError import *
+# from StaticCheck import StaticChecker
+# from StaticError import *
 # from CodeGenerator import CodeGenerator
 import subprocess
 
@@ -153,11 +156,10 @@ class TestChecker:
     @staticmethod
     def check(soldir, asttree, num):
         dest = open(os.path.join(soldir, str(num) + ".txt"), "w")
+        checker = StaticChecker(asttree)
         try:
-            StaticChecker().visit(asttree, None)
-            dest.write("successful")
-            # res = checker.check()
-            # dest.write(str(list(res)))
+            checker.check()
+            dest.write("")
         except StaticError as e:
             dest.write(str(e))
         finally:
