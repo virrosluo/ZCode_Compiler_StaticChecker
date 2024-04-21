@@ -82,6 +82,8 @@ class StaticChecker(BaseVisitor, Utils):
 class Utils():
     def InferType(id, inferType:Type, genEnv: list, checker:StaticChecker) -> Type:
         if type(id) is ArrayLiteral:
+            if type(inferType) is not ArrayType:
+                raise Exception()
             Utils.InferArray(id, inferType, genEnv, checker)
             return inferType
         else:
@@ -105,6 +107,8 @@ class Utils():
             if type(checker.getExprType(expr, genEnv, Identifier)) is NoneType: 
                 Utils.InferType(expr, inferType, genEnv, checker)
         else:
+            if len(expr.value) != inferType.eleLength:
+                raise Exception()
             for val in expr.value: 
                 Utils.InferArray(val, inferType.eleType, genEnv, checker)
 
@@ -163,13 +167,17 @@ class StaticChecker(BaseVisitor, Utils):
             
             if ast.varType:
                 if ast.varInit:
-                    valueType = self.getExprType(ast.varInit, param, Identifier)
+                    try:
+                        valueType = self.getExprType(ast.varInit, param, Identifier)
+                    except TypeCannotBeInferred as _:
+                        raise TypeCannotBeInferred(ast)
                 else: 
                     valueType = NoneType()
                 varType = self.visit(ast.varType, param)
                 
                 if type(valueType) is NoneType and ast.varInit: # Infer type for NoneType of right hand side variable of the declaration 
-                    valueType = Utils.InferType(ast.varInit, varType, param, self)
+                    try: valueType = Utils.InferType(ast.varInit, varType, param, self)
+                    except: raise TypeMismatchInStatement(ast)
                 
                 if type(valueType) is not NoneType and \
                     ((varType != valueType) or (varType != varSymbol.idType and type(varSymbol.idType) is not NoneType)):
@@ -180,7 +188,10 @@ class StaticChecker(BaseVisitor, Utils):
                 # Do not need to check the valueType is not Array because we permit in this. PROVE
                 if ast.varInit:
                     # Incase we have variableInit. If the RHS is NoneType but LHS also NoneType => Raise TypeCannotBeInferred
-                    valueType = self.getExprType(ast.varInit, param, Identifier)
+                    try:
+                        valueType = self.getExprType(ast.varInit, param, Identifier)
+                    except TypeCannotBeInferred as _:
+                        raise TypeCannotBeInferred(ast)
                     if type(valueType) is NoneType: raise TypeCannotBeInferred(ast)
                 else:
                     # Incase we dont have variableInit. The LHS Type can assign to NoneType
@@ -217,7 +228,7 @@ class StaticChecker(BaseVisitor, Utils):
                 # Incase the function had body but now define again
                 # Or case: the function declared twices
                 # Or the same name with the different num params or different param type => Considers as a new function
-                raise Redeclared(kind=Function(), name=ast.name)
+                raise Redeclared(kind=Function(), name=ast.name.name)
 
         # fn_instance.declare_type == FUNC_DECLR and ast.body != None
         if ast.body is not None:
@@ -232,7 +243,7 @@ class StaticChecker(BaseVisitor, Utils):
                 fn_instance.return_type = body_type[0][1]
             else:
                 for returnStmt, returnType in body_type:
-                    if fn_type != returnType: 
+                    if fn_type != returnType:
                         raise TypeMismatchInStatement(returnStmt)
             fn_instance.declare_type = FunctionType.FUNC_DEFIN
         return None
@@ -243,11 +254,13 @@ class StaticChecker(BaseVisitor, Utils):
         def on_check(correctType:Type):
             typeOperand_1 = self.getExprType(ast.left, param, Identifier)
             if type(typeOperand_1) is NoneType:
-                typeOperand_1 = Utils.InferType(ast.left, correctType(), param, self)
+                try: typeOperand_1 = Utils.InferType(ast.left, correctType(), param, self)
+                except: raise TypeMismatchInExpression(ast)
                 
             typeOperand_2 = self.getExprType(ast.right, param, Identifier)
             if type(typeOperand_2) is NoneType:
-                typeOperand_2 = Utils.InferType(ast.right, correctType(), param, self)
+                try: typeOperand_2 = Utils.InferType(ast.right, correctType(), param, self)
+                except: raise TypeMismatchInExpression(ast)
 
             if (type(typeOperand_1) is correctType) and (type(typeOperand_2) is correctType):
                 return typeOperand_1
@@ -278,7 +291,8 @@ class StaticChecker(BaseVisitor, Utils):
             if type(typeOperand) is correctType:
                 return typeOperand
             elif type(typeOperand) is NoneType:
-                return Utils.InferType(ast.operand, correctType(), param, self)
+                try: return Utils.InferType(ast.operand, correctType(), param, self)
+                except: raise TypeMismatchInExpression(ast)
             else:
                 raise TypeMismatchInExpression(ast)
 
@@ -327,15 +341,18 @@ class StaticChecker(BaseVisitor, Utils):
 
         idType = self.getExprType(ast.name, param, Identifier)
         if type(idType) is NoneType:
-            idType = Utils.InferType(ast.name, NumType(), param, self)
+            try: idType = Utils.InferType(ast.name, NumType(), param, self)
+            except: raise TypeMismatchInStatement(ast)
 
         condType = self.getExprType(ast.condExpr, param, Identifier)
         if type(condType) is NoneType:
-            condType = Utils.InferType(ast.condExpr, BoolType(), param, self)
+            try: condType = Utils.InferType(ast.condExpr, BoolType(), param, self)
+            except: raise TypeMismatchInStatement(ast)
             
         updType = self.getExprType(ast.updExpr, param, Identifier)
         if type(updType) is NoneType:
-            updType = Utils.InferType(ast.updExpr, NumType(), param, self)
+            try: updType = Utils.InferType(ast.updExpr, NumType(), param, self)
+            except: raise TypeMismatchInStatement(ast)
 
         if (type(condType) is not BoolType) or (type(idType) is not NumType) or (type(updType) is not NumType): 
             raise TypeMismatchInStatement(ast)
@@ -372,15 +389,20 @@ class StaticChecker(BaseVisitor, Utils):
             return [(ast, VoidType())]
 
     def visitAssign(self, ast, param) -> list:
-        right_type = self.getExprType(ast.rhs, param, Identifier)
-        left_type = self.getExprType(ast.lhs, param, Identifier)
+        try:
+            right_type = self.getExprType(ast.rhs, param, Identifier)
+            left_type = self.getExprType(ast.lhs, param, Identifier)
+        except TypeCannotBeInferred as _:
+            raise TypeCannotBeInferred(ast)
 
         if (type(left_type) is NoneType) and (type(right_type) is NoneType): 
             raise TypeCannotBeInferred(ast)
         elif type(left_type) is NoneType: # => Inferred to the left type
-            Utils.InferType(ast.lhs, right_type, param, self)
+            try: Utils.InferType(ast.lhs, right_type, param, self)
+            except: raise TypeMismatchInStatement(ast)
         elif type(right_type) is NoneType: # => Inferred to the right type
-            Utils.InferType(ast.rhs, left_type, param, self)
+            try: Utils.InferType(ast.rhs, left_type, param, self)
+            except: raise TypeMismatchInStatement(ast)
         else:
             if left_type != right_type: raise TypeMismatchInStatement(ast)
         return [None]
@@ -392,7 +414,8 @@ class StaticChecker(BaseVisitor, Utils):
             raise Undeclared(kind=Function(), name=ast.name.name)
         
         if type(fn_instance.return_type) is NoneType:
-            Utils.InferType(ast, VoidType(), param, self)
+            try: Utils.InferType(ast, VoidType(), param, self)
+            except: raise TypeMismatchInStatement(ast)
             
         if (type(fn_instance.return_type) is not VoidType) or len(fn_instance.params) != len(ast.args):
             raise TypeMismatchInStatement(ast)
@@ -417,7 +440,8 @@ class StaticChecker(BaseVisitor, Utils):
             for in_param, fn_param in zip(ast.args, fn_instance.params):
                 in_type = self.getExprType(in_param, param, Identifier)
                 if type(in_type) is NoneType:
-                    in_type = Utils.InferType(in_param, fn_param, param, self)
+                    try: in_type = Utils.InferType(in_param, fn_param, param, self)
+                    except: raise TypeMismatchInExpression(ast)
                 if in_type != fn_param:
                     raise TypeMismatchInExpression(ast)
                     
@@ -443,7 +467,8 @@ class StaticChecker(BaseVisitor, Utils):
         for index in ast.idx:
             idxType = self.getExprType(index, param, Identifier)
             if type(idxType) is NoneType:
-                idxType = Utils.InferType(index, NumType(), param, self)
+                try: idxType = Utils.InferType(index, NumType(), param, self)
+                except: raise TypeMismatchInExpression(ast)
             numTypeIdx = (type(idxType) is NumType) and numTypeIdx 
             
         arrType = self.getExprType(ast.arr, param, Identifier)
@@ -485,7 +510,9 @@ class StaticChecker(BaseVisitor, Utils):
         else:
             if len(validTypeList) > 0:
                 for expr, exprType in zip(ast.value, elementsType):
-                    if type(exprType) is NoneType: Utils.InferType(expr, validTypeList[0], param, self)
+                    if type(exprType) is NoneType: 
+                        try: Utils.InferType(expr, validTypeList[0], param, self)
+                        except: raise TypeMismatchInExpression(ast)
                 return ArrayType(validTypeList[0], float(len(elementsType)))
             else:
                 return NoneType()
